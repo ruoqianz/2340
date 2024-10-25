@@ -1,105 +1,86 @@
 import tkinter as tk
 import random
+import math
+import threading
+import time
+import psutil
 from ball import Ball
 
-# Create Window class, always at the top of the page
-class Window:
 
+class Window:
     def __init__(self, root):
         self.root = root
-        self.root.geometry("300x300")
+        self.root.geometry("600x600")
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
+        self.root.attributes('-transparentcolor', 'white')
 
-        # Title frame
-        self.title_bar = tk.Frame(self.root, bg="#C0D9D9", relief="raised", bd=2)
-        self.title_bar.pack(fill=tk.X)
-
-        # Title label
-        self.title_label = tk.Label(self.title_bar, text="Bouncing balls", bg="#00FF00", fg="white")
-        self.title_label.pack(side=tk.LEFT, expand=True, fill=tk.X)
-
-        # Content frame
-        self.content_frame = tk.Frame(self.root, bg="white", bd=2)
-        self.content_frame.pack(expand=True, fill=tk.BOTH)
-
-        # Add Canvas to Content frame
-        self.canvas = tk.Canvas(self.content_frame, bg="white")
+        # ball canvas
+        self.canvas = tk.Canvas(self.root, bg="white", highlightthickness=0)
         self.canvas.pack(expand=True, fill=tk.BOTH)
 
-        # Ensure that the entire window and all its subcomponents are updated
+        # ball background
+        window_diameter = 600
+        self.canvas.create_oval(0, 0, window_diameter, window_diameter, fill="lightblue", outline="")
+
         self.root.update()
 
-        # Create balls
+        # create ball
         self.balls = []
-        self.create_balls(5)
+        self.create_balls(100)
 
-        # Close Bottom
-        self.close_button = tk.Button(self.title_bar, text="X", command=self.root.quit, bg="black", fg="white")
-        self.close_button.pack(side=tk.RIGHT, padx=5)
-        self.close_button.bind("<Button-1>", self.close_window)
+        # close button
+        self.close_button = tk.Button(self.root, text="X", command=self.root.quit, bg="black", fg="white")
+        self.close_button.place(x=window_diameter - 30, y=10)
 
-        # Drag events
-        self.title_bar.bind("<Button-1>", self.start_drag)
-        self.title_bar.bind("<B1-Motion>", self.on_drag)
-        self.title_bar.bind("<ButtonRelease-1>", self.stop_drag)
+        # update thread
+        self.update_thread = threading.Thread(target=self.update_system_data)
+        self.update_thread.daemon = True
+        self.update_thread.start()
 
-        # Adjust size events
-        self.content_frame.bind("<Button-1>", self.start_resize)
-        self.content_frame.bind("<B1-Motion>", self.on_resize)
-        self.content_frame.bind("<ButtonRelease-1>", self.stop_resize)
+        self.animate()
 
-        # Drag offsets
-        self.offset_x = 0
-        self.offset_y = 0
-
-    # Handling the event conflict between close and drag that occurs when the mouse clicks close bottom
-    def close_window(self, event):
-        self.root.destroy()
-        return "break"
-
-    # Start dragging the window
-    def start_drag(self, event):
-        self.offset_x = event.x
-        self.offset_y = event.y
-        self.root.config(cursor="hand2")
-
-    # Stop dragging and resume cursor to default
-    def stop_drag(self, event):
-        self.root.config(cursor="")
-
-    # Handling drag window events
-    def on_drag(self, event):
-        x = event.x_root - self.offset_x
-        y = event.y_root - self.offset_y
-        self.root.geometry(f"+{x}+{y}")
-
-    # Start resizing
-    def start_resize(self, event):
-        self.offset_x = event.x
-        self.offset_y = event.y
-        self.root.config(cursor="cross")
-
-    # Stop dragging and resume cursor to default
-    def stop_resize(self,event):
-        self.root.config(cursor="")
-
-    # Handling resize window events
-    def on_resize(self, event):
-        new_width = max(event.x, 200)
-        new_height = max(event.y, 200)
-        self.root.geometry(f"{new_width}x{new_height}+{self.root.winfo_x()}+{self.root.winfo_y()}")
-
-    # Create 5 blue balls on canvas
     def create_balls(self, num_balls):
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
+        window_center_x = self.canvas.winfo_width() / 2
+        window_center_y = self.canvas.winfo_height() / 2
+        window_radius = min(self.canvas.winfo_width(), self.canvas.winfo_height()) / 2
 
-        # Random generate balls and make sure they all on canvas
         for i in range(num_balls):
-            radius = 15
-            x = random.randint(radius, canvas_width - radius)
-            y = random.randint(radius, canvas_height - radius)
-            color = "blue"
-            ball = Ball(self.canvas, x, y, radius, color)
+
+            angle = random.uniform(0, 2 * math.pi)
+            distance = random.uniform(0, window_radius - 30)
+            x = window_center_x + distance * math.cos(angle)
+            y = window_center_y + distance * math.sin(angle)
+
+            ball = Ball(self.canvas, x, y)
             self.balls.append(ball)
+
+#change color according color changed
+    def get_color(self):
+
+        t = int(time.time()) % 60
+        if t < 20:
+            return "blue"
+        elif 20 <= t < 40:
+            return "purple"
+        else:
+            return "red"
+
+    # Updating system data in a background thread
+    def update_system_data(self):
+        while True:
+            mem_info = psutil.virtual_memory()
+            cpu_usage = psutil.cpu_percent()
+
+            for ball in self.balls:
+                self.root.after(0, ball.update_properties, cpu_usage, mem_info.used, self.get_color())
+
+            time.sleep(20)
+
+    def animate(self):
+        for ball in self.balls:
+            self.root.after(0, ball.move)
+        #Update screen every 50ms
+        self.root.after(50, self.animate)
+
+
